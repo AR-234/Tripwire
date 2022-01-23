@@ -17,7 +17,7 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/ar234/tripwire">
+  <a href="https://github.com/AR-234/tripwire">
     <h3 align="center">Tripwire</h3>
   </a>
 
@@ -26,12 +26,12 @@
     <br />
     Tripwire will inform you if somebody or something does.
     <br />
-    <a href="https://github.com/ar234/tripwire"><strong>Explore the docs »</strong></a>
+    <a href="https://github.com/AR-234/tripwire"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/ar234/tripwire/issues">Report Bug</a>
+    <a href="https://github.com/AR-234/tripwire/issues">Report Bug</a>
     ·
-    <a href="https://github.com/ar234/tripwire/issues">Request Feature</a>
+    <a href="https://github.com/AR-234/tripwire/issues">Request Feature</a>
   </p>
 </div>
 
@@ -64,7 +64,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Tripwire Screen Shot][tripwire-screenshot]](https://github.com/ar234/tripwire)
+[![Tripwire Screen Shot][tripwire-screenshot]](https://github.com/AR-234/tripwire)
 
 Tripwire is a packet sniffing tool, which should be installed on a server that 
 is untouched in the network. It's job is to provide an early response if somebody 
@@ -97,7 +97,7 @@ Ports can be ignored but you wouldn't see if somebody tries to connect to Port 2
 
 1. Clone the repo
    ```sh
-   git clone https://github.com/ar234/tripwire.git
+   git clone https://github.com/AR-234/tripwire.git
    ```
 2. Copy triggers you want from trigger_example to trigger (Some trigger do have configs in the files)
 
@@ -133,7 +133,7 @@ Will write a detailed version the next days..
 
 Currently nothing is really planed, but you got an idea? Open an "issue" and submit it :)
 
-See the [open issues](https://github.com/ar234/tripwire/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/AR-234/tripwire/issues) for a full list of proposed features (and known issues).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -161,14 +161,14 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/ar234/tripwire.svg?style=flat
-[contributors-url]: https://github.com/ar234/tripwire/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/ar234/tripwire.svg?style=flat
-[forks-url]: https://github.com/ar234/tripwire/network/members
-[stars-shield]: https://img.shields.io/github/stars/ar234/tripwire.svg?style=flat
-[stars-url]: https://github.com/ar234/tripwire/stargazers
-[issues-shield]: https://img.shields.io/github/issues/ar234/tripwire.svg?style=flat
-[issues-url]: https://github.com/ar234/tripwire/issues
-[license-shield]: https://img.shields.io/github/license/ar234/tripwire.svg?style=flat
-[license-url]: https://github.com/ar234/tripwire/blob/master/LICENSE.txt
+[contributors-shield]: https://img.shields.io/github/contributors/AR-234/tripwire.svg?style=flat
+[contributors-url]: https://github.com/AR-234/tripwire/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/AR-234/tripwire.svg?style=flat
+[forks-url]: https://github.com/AR-234/tripwire/network/members
+[stars-shield]: https://img.shields.io/github/stars/AR-234/tripwire.svg?style=flat
+[stars-url]: https://github.com/AR-234/tripwire/stargazers
+[issues-shield]: https://img.shields.io/github/issues/AR-234/tripwire.svg?style=flat
+[issues-url]: https://github.com/AR-234/tripwire/issues
+[license-shield]: https://img.shields.io/github/license/AR-234/tripwire.svg?style=flat
+[license-url]: https://github.com/AR-234/tripwire/blob/master/LICENSE.txt
 [tripwire-screenshot]: https://i.imgur.com/Leun5Cn.png
