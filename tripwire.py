@@ -1,102 +1,278 @@
-import socket
-import threading
-import requests
+import socket, sys, struct, ipaddress, importlib, os, logging
 
-#
-# CONFIG
-#
+class Tripwire:
+    def __init__(self):
+        self.triggers = {}
+        self.package = 'trigger'
+        modList = self.getTriggerModules()
+        for mod in modList:
+            self.loadTrigger(mod)
 
-# Any Host that is reachable for you on port 80 could also be your router, pihole or whatever
-knownHost = '8.8.8.8' 
+    def loadTrigger(self, module):
+        logging.info("Loaded trigger: %s" % module)
+        self.triggers[module] = importlib.import_module(".".join([self.package, module]))
 
-# Listen for ICMP request, e.g. NMAP, would be a early response
-shouldSetIcmpWire = True
-# Listen on ports defined in ports
-shouldSetPortWire = True
+    #Get all Trigger Modules except for tigger_template
+    #Modules need to start with trigger_ and ends with .py
+    def getTriggerModules(self):
+        dir = os.path.join(sys.path[0], self.package)
+        modList = []
+        for entry in os.listdir(dir):
+            if os.path.isfile(os.path.join(dir,entry)) and not entry == "trigger_template.py" and entry.startswith("trigger_") and entry.endswith(".py"):
+                modList.append(os.path.splitext(entry)[0])
+        return modList
 
-ports = [
-    20,    # FTP Data Transfer
-    21,    # FTP Command Control
-    22,    # SSH
-    23,    # Telnet
-    25,    # SMTP
-    80,    # HTTP
-    110,   # POP3
-    119,   # NNTP
-    123,   # NTP
-    143,   # IMAP
-    161,   # SNMP
-    194,   # IRC
-    443,   # HTTPS
-    3306,  # MySQL Default port
-    27017, # MongoDB Default port
-]
+    def fireIcmpTrigger(self, eth, iph, icmph):
+        for mod_name, mod in self.triggers.items():
+            if hasattr(mod, 'icmp_trigger'):
+                getattr(mod, 'icmp_trigger')(eth, iph, icmph)
 
-#Put your telegram stuff here
-telegram_botToken = 'TOKEN'
-telegram_chatId   = 'CHATID'
+    def fireTcpTrigger(self, eth, iph, tcph):
+        for mod_name, mod in self.triggers.items():
+            if hasattr(mod, 'tcp_trigger'):
+                getattr(mod, 'tcp_trigger')(eth, iph, tcph)
 
-#
-# CONFIG END
-#
+    def fireTrigger(self, eth, iph):
+        for mod_name, mod in self.triggers.items():
+            if hasattr(mod, 'trigger'):
+                getattr(mod, 'trigger')(eth, iph)
 
-#Resolves your network IP
-def GetLocalIP(knownHost):
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.connect((knownHost, 80))
-        return sock.getsockname()[0]
+class Network:
+    IP_PROTOCOL = 8
+    TCP_PROTOCOL = 6
+    ICMP_PROTOCOL = 1
 
-def PortWire(host, port) -> None:
-    threading.Thread(target=PortWireHandle, args=(host, port,)).start()
+    onlyLocal = False
+    localIp = '127.0.0.1'
+    localhost = '127.0.0.1'
 
-#Listens to a port, if anything connects it triggers
-def PortWireHandle(host, port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind((host, port))
-        sock.listen(1)
-        print("Portwire on Port " + str(port) + " is set.")
+    local = []
+    ignoreTcp = []
 
-        while True:
-            conn, addr = sock.accept()
-            trigger("Port-Wire was tripped by "+ str(addr[0]) + " on Port " + str(port))
-            conn.close()
+    @staticmethod
+    def addLocal(item):
+        """Add a ip or CIDR to the local network list"""
+        tmp = item
+        if "/" not in tmp:
+            # Change IP to CIDR notation -> /32 is a specifc IP
+            tmp = tmp + "/32"
+        Network.local.append( ipaddress.IPv4Network(tmp) )
 
-def IcmpWire() -> None:
-    threading.Thread(target=IcmpWireHandle, args=()).start()
+    @staticmethod
+    def addLocalRange(list):
+        """Add a range of IPs or CIDRs to the local network list"""
+        for i in list:
+            Network.addLocal(i)
 
-#Listens to Icmp Requests e.g. NMAP and triggers if any request is received
-def IcmpWireHandle():
-    with socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP) as sock:
-        sock.setsockopt(socket.SOL_IP, socket.IP_HDRINCL, 1)
-        print("ICMP-Wire is set")
+    @staticmethod
+    def isLocal(ip):
+        """Checks if the IP is in the local network list"""
+        ip = ipaddress.IPv4Address(ip)
+        for network in Network.local:
+            if ip in network:
+                return True
+        return False
 
-        while True:
-            _, addr = sock.recvfrom(1024)
-            trigger("ICMP-Wire was tripped by "+ str(addr[0]))
+    @staticmethod
+    def addTcpIgnore(item):
+        """Add a IP and CIDR with port tuple to the TCP ignore list (For port -> none == any port)"""
+        # If not a CIDR notation
+        tmp = item[0]
+        if "/" not in tmp:
+            # Change IP to CIDR notation -> /32 is a specifc IP
+            tmp = tmp + "/32"
+        Network.ignoreTcp.append( (ipaddress.IPv4Network(tmp), item[1]) )
+    
+    @staticmethod
+    def addTcpIgnoreRange(list):
+        """Adds IPs and CIDRs with there port tuples to the TCP ignore list (For port -> none == any port)"""
+        for i in list:
+            Network.addTcpIgnore(i)
 
-def telegram_message(message):
-    global telegram_botToken, telegram_chatId
-    sendText = 'https://api.telegram.org/bot' + telegram_botToken + '/sendMessage?chat_id=' + telegram_chatId + '&parse_mode=Markdown&text=' + message
-    response = requests.get(sendText)
-    return response.json()
+class EthernetHeader:
+    """Class to process a packet to EthernetHeader"""
+    length = 14
 
-#This should happen on any trigger
-def trigger(message):
-    print(message)
-    telegram_message(message)
+    #Parse the EthernetHeader 
+    def __init__(self, packet):
+        self.header = packet[:self.length]
+        self.unpacked = struct.unpack('!6s6sH' , self.header)
+        self.protocol = socket.ntohs(self.unpacked[2])
+        self.src_mac = EthernetHeader.ethAddr(packet[0:6])
+        self.dest_mac = EthernetHeader.ethAddr(packet[0:6])
+
+    @staticmethod
+    def ethAddr(p) :
+        """Convert integer array to hex mac address"""
+        return ':'.join(format(x, '02x') for x in p)
+
+class IpHeader:
+    """Class to process a packet to IpHeader"""
+    #Parse the IpHeader 
+    #https://datatracker.ietf.org/doc/html/rfc791
+    def __init__(self, packet):
+        raw = packet[EthernetHeader.length:(20+EthernetHeader.length)]
+        self.unpacked = struct.unpack('!BBHHHBBH4s4s' , raw)
+        version_length = self.unpacked[0]
+        self.version = version_length >> 4
+        self.length = (version_length & 0xF) * 4
+        self.ttl = self.unpacked[5]
+        self.protocol = self.unpacked[6]
+        self.src_addr = str(socket.inet_ntoa(self.unpacked[8]))
+        self.dest_addr = str(socket.inet_ntoa(self.unpacked[9]))
+
+class TcpHeader:
+    """Class to process a packet to TcpHeader"""
+    #Parse the Tcp Header
+    #https://datatracker.ietf.org/doc/html/rfc793
+    def __init__(self, iph, packet):
+        rawLength = iph.length + EthernetHeader.length
+        raw = packet[rawLength:rawLength+20]
+        self.unpacked = struct.unpack('!HHLLBBHHH' , raw)
+        self.src_port = self.unpacked[0]
+        self.dest_port = self.unpacked[1]
+        self.sequence = self.unpacked[2]
+        self.acknowledgement = self.unpacked[3]
+        self.length = self.unpacked[4] >> 4
+        size = EthernetHeader.length + iph.length + self.length * 4
+        self.size = len(packet) - size
+        self.data = packet[size:]
+
+class IcmpHeader:
+    """Class to process a packet to IcmpHeader"""
+    #Parse the Icmp Header
+    #https://datatracker.ietf.org/doc/html/rfc792
+    def __init__(self, iph, packet):
+        rawLength = iph.length + EthernetHeader.length
+        self.size = rawLength + 4
+        self.unpacked = struct.unpack('!BBH' , packet[rawLength:rawLength+4])
+        self.type = self.unpacked[0]
+        self.code = self.unpacked[1]
+        self.checksum = self.unpacked[2]
+        self.dataSize = len(packet) - self.size
+        self.data = packet[self.dataSize:]
+
+# Get Local Ip automagically
+def autoLocalIp(knownHost):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect((knownHost, 80))
+            return sock.getsockname()[0]
+    except Exception:
+        logging.critical("Could not get local IP automagically, please use the override config")
+        sys.exit()
+
+def loadConfig(file):
+    """Load Config.py and send the variables the right way, also loads trigger modules and setting up logging"""
+    logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s", datefmt='%Y-%m-%d, %H:%M:%S')
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(logging.DEBUG)
+
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+
+    try:
+        config = importlib.import_module("config")
+    except Exception:
+        logging.critical("Could not load config")
+        exit()
+    
+    if hasattr(config, "consoleLogLevel"):
+        consoleHandler.setLevel( getattr(config, "consoleLogLevel") )
+
+    if hasattr(config, "fileLogging") and getattr(config, "fileLogging") and hasattr(config, "fileLog"):
+        fileHandler = logging.FileHandler(getattr(config, "fileLog"), mode='a')
+        fileHandler.setFormatter(logFormatter)
+        rootLogger.addHandler(fileHandler)
+
+    if hasattr(config, "fileLogLevel"):
+        fileHandler.setLevel( getattr(config, "fileLogLevel") )
+
+    if hasattr(config, "localIpOverride"):
+        Network.localIp = getattr(config, "localIpOverride")
+    else:
+        if hasattr(config, "knownHost"):
+            Network.localIp = autoLocalIp( getattr(config, "knownHost") )
+            logging.info("Own IP is %s" % Network.localIp)
+        else:
+            logging.error("Could not get local ip, config is wrong, knownHost and localIpOverride isn't set")
+    
+    if hasattr(config, "tcpIgnoreList"):
+        Network.addTcpIgnoreRange( getattr(config, "tcpIgnoreList") )
+
+    if hasattr(config, "localIpList"):
+        Network.addLocalRange( getattr(config, "localIpList") )
 
 def main() -> None:
-    #Setting Port wires
-    if shouldSetPortWire:
-        localIp = GetLocalIP(knownHost)
-        for port in ports:
-            PortWire(localIp, port)
+    loadConfig("config")
+    tripwire = Tripwire()
+    
+    # Create Sniff Socket
+    try:
+        sock = socket.socket( socket.AF_PACKET , socket.SOCK_RAW , socket.ntohs(0x0003))
+    except socket.error as msg:
+        try:
+            logging.critical('Socket could not be created. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
+        except Exception:
+            logging.critical('Socket could not be created. Root privilege is needed. Please run again as root.')
+        sys.exit()
 
-    #Setting Icmp wires
-    if shouldSetIcmpWire:
-        IcmpWire()
-        
-    print("All Tripwires are set, waiting for action..")
+    logging.info("Sniffer is running..")
+
+    while True:
+        #Receive a packet
+        packet = sock.recvfrom(65565)[0]
+
+        #Parse Ethernet Header
+        eth = EthernetHeader(packet)
+
+        if eth.protocol == Network.IP_PROTOCOL:
+            #Parse IP Header
+            iph = IpHeader(packet)
+
+            #Traffic is not meant for this machine -> skip
+            if iph.dest_addr != Network.localIp and iph.src_addr != Network.localIp:
+                continue
+            
+            #Traffic is internal -> skip
+            if iph.dest_addr == Network.localhost or iph.src_addr == Network.localhost:
+                continue
+            
+            # Only Local check, if this option is turned on and when it is not traffic from the local network -> skip
+            if Network.onlyLocal and (not Network.isLocal(iph.dest_addr) or not Network.isLocal(iph.src_addr)):
+                continue
+
+            #TCP protocol
+            if iph.protocol == Network.TCP_PROTOCOL:
+                #Parse TCP packet
+                tcph = TcpHeader(iph, packet)
+
+                skip = False
+                for ignore in Network.ignoreTcp:
+                    if ipaddress.IPv4Address(iph.dest_addr) in ignore[0] or ipaddress.IPv4Address(iph.src_addr) in ignore[0]:
+                        if ignore[1] is None or tcph.dest_port == ignore[1] or tcph.src_port == ignore[1]:
+                            skip = True
+                            break
+                if skip:
+                    continue
+
+                #Packet tries to establish a new TCP connection to the machine -> Trigger
+                if iph.src_addr != Network.localIp and tcph.acknowledgement == 0x00:
+                    logging.info("TCP-Trigger by " + iph.src_addr + " (" + eth.src_mac + ") on Port " + str(tcph.dest_port))
+                    tripwire.fireTrigger(eth, iph)
+                    tripwire.fireTcpTrigger(eth, iph, tcph)
+                    
+            #ICMP Packets
+            elif iph.protocol == Network.ICMP_PROTOCOL: 
+                #Parse ICMP packet
+                icmph = IcmpHeader(iph, packet)
+
+                #Not the local machine is asking for a Timestamp, Information Request or Echo -> Trigger
+                if iph.src_addr != Network.localIp and (icmph.type == 13 or icmph.type == 15 or icmph.type == 8):
+                    logging.info("IMCP-Trigger by " + iph.src_addr + " (" + eth.src_mac + ") of Type " + str(icmph.type))
+                    tripwire.fireTrigger(eth, iph)
+                    tripwire.fireIcmpTrigger(eth, iph, icmph)
 
 if __name__ == "__main__":
     main()
