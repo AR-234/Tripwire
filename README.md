@@ -98,6 +98,7 @@ Ports can be ignored but you wouldn't see if somebody tries to connect to Port 2
 git clone https://github.com/AR-234/tripwire.git
 ```
 2. Install python modules
+additional modules required in the trigger_example are not included
 ```sh
 pip install -r requirements.txt
 ```
