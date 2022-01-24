@@ -268,8 +268,11 @@ def main() -> None:
                 if iph.src_addr != Network.localIp and tcph.acknowledgement == 0x00:
                     logging.info("TCP-Trigger by " + iph.src_addr + " (" + eth.src_mac + ") on Port " + str(tcph.dest_port))
                     tripwire.fireTrigger(eth, iph)
-                    tripwire.fireTcpTrigger(eth, iph, tcph)
-                    
+                    try:
+                        tripwire.fireTcpTrigger(eth, iph, tcph)
+                    except ratelimit.exception.RateLimitException:
+                        pass
+
             #ICMP Packets
             elif iph.protocol == Network.ICMP_PROTOCOL: 
                 #Parse ICMP packet
