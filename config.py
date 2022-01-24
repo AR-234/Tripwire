@@ -31,11 +31,6 @@ localIpList = [
     "192.168.0.0/16",
 ]
 
-# Avoid a DoS limiting the times a trigger can activate (ratelimitCalls) in a time period (ratelimitPeriod)
-ratelimitCalls = 5
-ratelimitPeriod = 10
-
-
 consoleLogLevel = logging.INFO
 
 fileLogging = True
