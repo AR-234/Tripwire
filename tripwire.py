@@ -1,6 +1,11 @@
 import socket, sys, struct, ipaddress, importlib, os, logging
+import ratelimit
+
 
 class Tripwire:
+    ratelimitCalls = 5
+    ratelimitPeriod = 10
+
     def __init__(self):
         self.triggers = {}
         self.package = 'trigger'
@@ -22,11 +27,13 @@ class Tripwire:
                 modList.append(os.path.splitext(entry)[0])
         return modList
 
+    @ratelimit.limits(calls=ratelimitCalls, period=ratelimitPeriod)
     def fireIcmpTrigger(self, eth, iph, icmph):
         for mod_name, mod in self.triggers.items():
             if hasattr(mod, 'icmp_trigger'):
                 getattr(mod, 'icmp_trigger')(eth, iph, icmph)
 
+    @ratelimit.limits(calls=ratelimitCalls, period=ratelimitPeriod)
     def fireTcpTrigger(self, eth, iph, tcph):
         for mod_name, mod in self.triggers.items():
             if hasattr(mod, 'tcp_trigger'):
@@ -270,9 +277,12 @@ def main() -> None:
 
                 #Not the local machine is asking for a Timestamp, Information Request or Echo -> Trigger
                 if iph.src_addr != Network.localIp and (icmph.type == 13 or icmph.type == 15 or icmph.type == 8):
-                    logging.info("IMCP-Trigger by " + iph.src_addr + " (" + eth.src_mac + ") of Type " + str(icmph.type))
+                    logging.info("ICMP-Trigger by " + iph.src_addr + " (" + eth.src_mac + ") of Type " + str(icmph.type))
                     tripwire.fireTrigger(eth, iph)
-                    tripwire.fireIcmpTrigger(eth, iph, icmph)
+                    try:
+                        tripwire.fireIcmpTrigger(eth, iph, icmph)
+                    except ratelimit.exception.RateLimitException:
+                        pass
 
 if __name__ == "__main__":
     main()
