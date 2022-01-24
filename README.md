@@ -94,14 +94,19 @@ Ports can be ignored but you wouldn't see if somebody tries to connect to Port 2
 ### Installation
 
 1. Clone the repo
-   ```sh
-   git clone https://github.com/AR-234/tripwire.git
-   ```
-2. Copy triggers you want from trigger_example to trigger (Some trigger do have configs in the files)
+```sh
+git clone https://github.com/AR-234/tripwire.git
+```
+2. Install python modules
+additional modules required in the trigger_example are not included
+```sh
+pip install -r requirements.txt
+```
+3. Copy triggers you want from trigger_example to trigger (Some trigger do have configs in the files)
 
-3. Open config.py and change the settings like you need them (more in usage)
+4. Open config.py and change the settings like you need them (more in usage)
 
-4. Run the script with root privileges
+5. Run the script with root privileges
 ```sh
 sudo python3 tripwire.py
 ```
@@ -111,7 +116,7 @@ sudo crontab -e
 ```
 and add this line
 ```sh
-@restart python3 /home/root/{installation_dir}/tripwire.py
+@reboot python3 /home/root/{installation_dir}/tripwire.py
 ```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
